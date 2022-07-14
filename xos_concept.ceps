@@ -1,0 +1,115 @@
+kind Systemstate;
+kind Event;
+
+Systemstate DeviceID;
+Systemstate CAN_ID_Base;
+
+val CAN_ID_MAPPING_BASE = 32;
+val CAN_ID_SET_MAPPING = CAN_ID_MAPPING_BASE + 1;
+val CAN_ID_RESET_MAPPING = CAN_ID_SET_MAPPING + 1;
+val CAN_ID_PROPAGATE_DEVICE_ID = CAN_ID_MAPPING_BASE + 2;
+
+Event evTimer_BroadcastingDeviceID_Elapsed;
+Event evPropagateDeviceID;
+Event evSetMappingForDevice;
+Event evResetAllMappings;
+
+val DeviceIDBroadcastInterval = 1.0*s;
+
+comment{"
+Each EVAcharge board computes the CAN IDs it uses by adding ";CAN_ID_Base;
+" which is 0x0 by default. The base can be set to another value via the CAN message "; SetMappingForDevice; ".";
+"\n\n";};
+
+frame{
+   id{SetMappingForDevice;};
+   cob_id{CAN_ID_SET_MAPPING;};
+   data{
+     payload{
+      int32{
+       in{DeviceID;};
+       out{DeviceID;};
+      };     
+      int16{
+       in{CAN_ID_Base;};
+       out{CAN_ID_Base;};
+      };     
+     };
+   };
+};
+
+comment{"
+Each EVAcharge board broadcasts a unique id every ";DeviceIDBroadcastInterval;" sec.
+";};
+
+frame{
+   id{PropagateDeviceID;};
+   cob_id{CAN_ID_PROPAGATE_DEVICE_ID;};
+   data{
+     payload{
+      int32{
+       in{DeviceID;};
+       out{DeviceID;};
+      };     
+    };
+    };
+};
+
+frame{
+   id{ResetAllMappings;};
+   cob_id{CAN_ID_RESET_MAPPING;};
+};
+
+sm{
+   EVAChargeEVSEBoard;
+   states{
+      Initial;
+      PowerOn;
+      Ready;
+   };
+   sm{
+      DeviceBroadcast;
+      states{Initial; GenerateUniqueDeviceID; WaitForTimer; BroadcastDeviceID;};
+      Actions{
+         doStartTimer{
+            start_periodic_timer(DeviceIDBroadcastInterval,evTimer_BroadcastingDeviceID_Elapsed);
+         };
+         doSendDevicID{
+            { evPropagateDeviceID; };
+         };
+      };
+      t{Initial;GenerateUniqueDeviceID;doStartTimer;};
+      t{GenerateUniqueDeviceID;WaitForTimer; };
+      t{WaitForTimer;BroadcastDeviceID;evTimer_BroadcastingDeviceID_Elapsed;};
+      t{BroadcastDeviceID;WaitForTimer;};
+   };
+
+   sm{
+      CANInterfaceMapper;
+      states{Initial;WaitForSetMapping;SetNewBase;ResetBaseToOriginal;};
+      t{Initial;WaitForSetMapping;};
+      t{WaitForSetMapping; SetNewBase; evSetMappingForDevice;};
+      t{SetNewBase;WaitForSetMapping;};
+      t{WaitForSetMapping;ResetBaseToOriginal;evResetAllMappings;};
+      t{ResetBaseToOriginal;WaitForSetMapping;};
+   };
+
+   t{Initial;PowerOn;};
+   t{PowerOn;Ready;};
+   t{Ready;DeviceBroadcast;};
+   t{Ready;CANInterfaceMapper;};
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
